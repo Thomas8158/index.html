@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carnet de Voyage — Paris</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e14;
+    --surface: #16161f;
+    --card: #1e1e2e;
+    --border: #2a2a3d;
+    --accent1: #ff6b6b;
+    --accent2: #ffd93d;
+    --accent3: #6bcb77;
+    --accent4: #4d96ff;
+    --text: #f0eee8;
+    --muted: #8886a0;
+    --font-display: 'Playfair Display', serif;
+    --font-body: 'DM Sans', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── PASSWORD SCREEN ── */
+  #lock-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .lock-inner {
+    text-align: center;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(24px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+
+  .lock-emoji { font-size: 48px; margin-bottom: 20px; display: block; }
+
+  .lock-title {
+    font-family: var(--font-display);
+    font-size: 32px;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .lock-subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 32px;
+    letter-spacing: 0.05em;
+  }
+
+  .lock-input-wrap {
+    position: relative;
+    margin-bottom: 14px;
+  }
+
+  .lock-input {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 15px;
+    padding: 13px 20px;
+    border-radius: 12px;
+    width: 280px;
+    outline: none;
+    letter-spacing: 0.1em;
+    text-align: center;
+    transition: border-color 0.2s;
+  }
+
+  .lock-input:focus { border-color: var(--accent4); }
+  .lock-input.error { border-color: var(--accent1); animation: shake 0.3s ease; }
+
+  @keyframes shake {
+    0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)}
+  }
+
+  .lock-btn {
+    background: var(--accent4);
+    color: #fff;
+    border: none;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 13px 36px;
+    border-radius: 12px;
+    cursor: pointer;
+    width: 280px;
+    transition: opacity 0.2s, transform 0.1s;
+    letter-spacing: 0.03em;
+  }
+
+  .lock-btn:hover { opacity: 0.88; }
+  .lock-btn:active { transform: scale(0.98); }
+
+  .lock-hint {
+    margin-top: 16px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .lock-error {
+    font-size: 12px;
+    color: var(--accent1);
+    height: 18px;
+    margin-bottom: 8px;
+  }
+
+  /* ── MAIN APP ── */
+  #app {
+    display: none;
+    height: 100vh;
+    flex-direction: column;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 1000;
+    background: rgba(14,14,20,0.92);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    height: 60px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .header-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    color: var(--text);
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .header-title span { color: var(--accent1); }
+
+  .header-right {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .day-badge {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .day-badge:hover { border-color: var(--accent4); color: var(--accent4); }
+  .day-badge.active { background: var(--accent4); border-color: var(--accent4); color: #fff; }
+
+  /* ── MAP ── */
+  #map {
+    position: fixed;
+    top: 60px; left: 0; right: 0; bottom: 0;
+    z-index: 1;
+  }
+
+  /* Leaflet dark tiles override */
+  .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(0.85) saturate(0.7); }
+  .leaflet-container { background: #1a1a28; }
+
+  /* Custom markers */
+  .custom-marker {
+    width: 36px; height: 36px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    border: 2.5px solid rgba(255,255,255,0.2);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  }
+
+  .custom-marker:hover {
+    transform: rotate(-45deg) scale(1.15);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+  }
+
+  .custom-marker .marker-icon {
+    transform: rotate(45deg);
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  /* ── SIDE PANEL ── */
+  #panel {
+    position: fixed;
+    top: 60px; right: 0; bottom: 0;
+    width: 420px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 500;
+    transform: translateX(100%);
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  #panel.open { transform: translateX(0); }
+
+  .panel-header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .panel-day {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+
+  .panel-title {
+    font-family: var(--font-display);
+    font-size: 22px;
+    color: var(--text);
+    line-height: 1.2;
+    margin-bottom: 4px;
+  }
+
+  .panel-subtitle {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .panel-close {
+    position: absolute;
+    top: 18px; right: 18px;
+    width: 32px; height: 32px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    color: var(--muted);
+    transition: all 0.2s;
+  }
+
+  .panel-close:hover { color: var(--text); border-color: var(--muted); }
+
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .panel-body::-webkit-scrollbar { width: 4px; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Text section */
+  .panel-text {
+    font-size: 13.5px;
+    line-height: 1.75;
+    color: #c8c6da;
+    margin-bottom: 20px;
+  }
+
+  .panel-text p { margin-bottom: 10px; }
+
+  .panel-quote {
+    border-left: 3px solid;
+    padding: 10px 14px;
+    margin: 14px 0;
+    font-style: italic;
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--card);
+    border-radius: 0 8px 8px 0;
+  }
+
+  /* Photos section */
+  .photos-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .photos-label {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .add-photo-btn {
+    background: var(--card);
+    border: 1.5px dashed var(--border);
+    color: var(--muted);
+    font-family: var(--font-body);
+    font-size: 11px;
+    padding: 5px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .add-photo-btn:hover { border-color: var(--accent4); color: var(--accent4); }
+
+  .photos-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .photo-item {
+    position: relative;
+    aspect-ratio: 4/3;
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--card);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    group: true;
+  }
+
+  .photo-item img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s;
+  }
+
+  .photo-item:hover img { transform: scale(1.05); }
+
+  .photo-delete {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 24px; height: 24px;
+    background: rgba(0,0,0,0.7);
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    display: none;
+    align-items: center; justify-content: center;
+    transition: background 0.2s;
+  }
+
+  .photo-item:hover .photo-delete { display: flex; }
+  .photo-delete:hover { background: var(--accent1); }
+
+  .photo-empty {
+    grid-column: span 2;
+    padding: 24px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    border: 1.5px dashed var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .photo-empty:hover { border-color: var(--accent4); color: var(--accent4); }
+
+  /* Lightbox */
+  #lightbox {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 9000;
+    align-items: center; justify-content: center;
+    cursor: zoom-out;
+  }
+
+  #lightbox.open { display: flex; }
+
+  #lightbox img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 8px;
+    object-fit: contain;
+  }
+
+  #lightbox-close {
+    position: absolute;
+    top: 20px; right: 20px;
+    background: rgba(255,255,255,0.1);
+    border: none;
+    color: #fff;
+    font-size: 24px;
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* Legend */
+  .map-legend {
+    position: fixed;
+    bottom: 24px; left: 24px;
+    background: rgba(22,22,31,0.92);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    z-index: 400;
+    font-size: 11px;
+  }
+
+  .legend-title {
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    font-weight: 500;
+  }
+
+  .legend-item {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--text);
+    margin-bottom: 6px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background 0.15s;
+  }
+
+  .legend-item:hover { background: var(--card); }
+  .legend-item:last-child { margin-bottom: 0; }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Count badge */
+  .count-badge {
+    position: fixed;
+    top: 76px; left: 16px;
+    background: rgba(22,22,31,0.88);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 11px;
+    color: var(--muted);
+    z-index: 400;
+    backdrop-filter: blur(8px);
+  }
+
+  .count-badge strong { color: var(--text); }
+
+  /* File input hidden */
+  #file-input { display: none; }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    #panel { width: 100%; }
+    .map-legend { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOCK SCREEN -->
+<div id="lock-screen">
+  <div class="lock-inner">
+    <span class="lock-emoji">🗺️</span>
+    <h1 class="lock-title">Carnet de Voyage</h1>
+    <p class="lock-subtitle">Paris — Mars 2025 · Lucas</p>
+    <div class="lock-error" id="lock-error"></div>
+    <div class="lock-input-wrap">
+      <input type="password" class="lock-input" id="lock-input" placeholder="mot de passe" autocomplete="off"/>
+    </div>
+    <button class="lock-btn" onclick="checkPassword()">Entrer ✦</button>
+    <p class="lock-hint">Mot de passe : paris2025</p>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-title">
+      ✦ Carnet <span>Paris</span>
+    </div>
+    <div class="header-right" id="day-filters">
+      <span class="day-badge active" data-day="all" onclick="filterDay('all', this)">Tous</span>
+      <span class="day-badge" data-day="1" onclick="filterDay('1', this)">Lun 9</span>
+      <span class="day-badge" data-day="2" onclick="filterDay('2', this)">Mar 10</span>
+      <span class="day-badge" data-day="3" onclick="filterDay('3', this)">Mer 11</span>
+      <span class="day-badge" data-day="4" onclick="filterDay('4', this)">Jeu 12</span>
+      <span class="day-badge" data-day="5" onclick="filterDay('5', this)">Ven 13</span>
+    </div>
+  </div>
+
+  <!-- Map -->
+  <div id="map"></div>
+
+  <!-- Count badge -->
+  <div class="count-badge"><strong id="visible-count">10</strong> lieux visités</div>
+
+  <!-- Legend -->
+  <div class="map-legend">
+    <div class="legend-title">Jours</div>
+    <div class="legend-item" onclick="filterDay('1', null)"><div class="legend-dot" style="background:#ff6b6b"></div>Lundi 9 — Mémoire</div>
+    <div class="legend-item" onclick="filterDay('2', null)"><div class="legend-dot" style="background:#ffd93d"></div>Mardi 10 — Art</div>
+    <div class="legend-item" onclick="filterDay('3', null)"><div class="legend-dot" style="background:#6bcb77"></div>Mercredi 11 — Institutions</div>
+    <div class="legend-item" onclick="filterDay('4', null)"><div class="legend-dot" style="background:#4d96ff"></div>Jeudi 12 — Culture</div>
+    <div class="legend-item" onclick="filterDay('5', null)"><div class="legend-dot" style="background:#c77dff"></div>Vendredi 13 — Marine</div>
+  </div>
+
+  <!-- Side Panel -->
+  <div id="panel">
+    <div class="panel-header">
+      <div class="panel-day" id="panel-day"></div>
+      <div class="panel-title" id="panel-title"></div>
+      <div class="panel-subtitle" id="panel-subtitle"></div>
+      <button class="panel-close" onclick="closePanel()">✕</button>
+    </div>
+    <div class="panel-body">
+      <div class="panel-text" id="panel-text"></div>
+      <div class="photos-header">
+        <span class="photos-label">📷 Mes photos</span>
+        <button class="add-photo-btn" onclick="triggerUpload()">+ Ajouter</button>
+      </div>
+      <div class="photos-grid" id="photos-grid"></div>
+    </div>
+  </div>
+
+  <!-- Lightbox -->
+  <div id="lightbox" onclick="closeLightbox()">
+    <button id="lightbox-close" onclick="closeLightbox()">✕</button>
+    <img id="lightbox-img" src="" alt="">
+  </div>
+
+  <!-- Hidden file input -->
+  <input type="file" id="file-input" accept="image/*" multiple onchange="handleFiles(event)">
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ── PASSWORD ──
+const PASSWORD = 'paris2025';
+
+function checkPassword() {
+  const val = document.getElementById('lock-input').value;
+  const err = document.getElementById('lock-error');
+  const inp = document.getElementById('lock-input');
+  if (val === PASSWORD) {
+    document.getElementById('lock-screen').style.opacity = '0';
+    document.getElementById('lock-screen').style.transition = 'opacity 0.4s';
+    setTimeout(() => {
+      document.getElementById('lock-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      initMap();
+    }, 400);
+  } else {
+    err.textContent = 'Mot de passe incorrect.';
+    inp.classList.add('error');
+    setTimeout(() => { inp.classList.remove('error'); err.textContent = ''; }, 1000);
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('lock-screen').style.display !== 'none') checkPassword();
+});
+
+// ── DATA ──
+const dayColors = { 1:'#ff6b6b', 2:'#ffd93d', 3:'#6bcb77', 4:'#4d96ff', 5:'#c77dff' };
+
+const locations = [
+  {
+    id: 'mont-valerien', day: 1,
+    name: 'Mont Valérien',
+    subtitle: 'Suresnes · Haut lieu de la mémoire nationale',
+    icon: '🕯️',
+    lat: 48.8677, lng: 2.2127,
+    text: `<p>Je ne savais pas trop à quoi m'attendre. De l'extérieur c'est juste une colline boisée, un vieux fort militaire. Et puis on commence la visite et l'ambiance change complètement.</p>
+    <p>Entre 1941 et 1944, plus de <strong>1 008 personnes</strong> ont été fusillées ici par les nazis — des résistants, des otages, des Juifs, des communistes. On marche sur le même chemin qu'eux, de la chapelle jusqu'à la clairière.</p>
+    <p>Dans cette chapelle, les graffitis sont encore là sur les murs. Des gens qui allaient mourir et qui ont pris le temps d'écrire leur prénom, une date, "Vive la France".</p>`,
+    quote: 'Ces mots gravés par des mains qui savaient qu\'elles allaient mourir dans quelques minutes — ça fait quelque chose qu\'on n\'oublie pas.'
+  },
+  {
+    id: 'drancy', day: 2,
+    name: 'Mémorial de la Shoah',
+    subtitle: 'Drancy · Camp de transit 1941–1944',
+    icon: '✡️',
+    lat: 48.9197, lng: 2.4561,
+    text: `<p>Drancy. Avant d'être un camp, la Cité de la Muette était un projet de logements sociaux des années 1930. Réquisitionnée par les nazis avec la complicité de Vichy, elle est devenue le principal camp de transit des Juifs de France.</p>
+    <p>Entre mars 1942 et août 1944, environ <strong>63 000 Juifs</strong> sont passés par là — soit 84% des Juifs déportés de France — avant d'être acheminés vers Auschwitz.</p>
+    <p>Ce qui m'a le plus marqué : les documents administratifs. Les nazis ont tout noté avec une précision froide. Des enfants de 2 ans dans ces listes. Et c'était la police <em>française</em> qui organisait les rafles.</p>`,
+    quote: 'Le wagon de déportation exposé dehors — je suis resté longtemps devant. Ce n\'est qu\'une caisse de métal rouillé. Mais on sait ce qu\'il contenait.'
+  },
+  {
+    id: 'orsay', day: 2,
+    name: 'Musée d\'Orsay',
+    subtitle: 'Ancienne gare · Chef-d\'œuvre de l\'impressionnisme',
+    icon: '🎨',
+    lat: 48.8600, lng: 2.3266,
+    text: `<p>Vraiment ce que j'attendais depuis le début, et c'était encore mieux que prévu. L'ancienne gare construite en <strong>1900 pour l'Exposition universelle</strong> par Victor Laloux — la grande nef avec la verrière et les horloges géantes, c'est beau.</p>
+    <p>La plus grande collection de peintures impressionnistes au monde : Monet, Renoir, Degas, Van Gogh, Cézanne… couvrant 1848 à 1914.</p>
+    <p>Je me suis arrêté devant <em>Le Déjeuner sur l'herbe</em> de Manet. Une femme nue qui regarde droit dans les yeux du spectateur, sans se cacher. En 1863 ça a scandalisé Paris entier. Manet se moquait des conventions académiques.</p>`,
+    quote: 'L\'horloge vue de l\'intérieur — Paris à l\'envers, dans un cadran de métal doré.'
+  },
+  {
+    id: 'seine', day: 2,
+    name: 'Balade sur la Seine',
+    subtitle: 'Rive gauche · L\'axe de Paris',
+    icon: '🌊',
+    lat: 48.8566, lng: 2.3522,
+    text: `<p>Une odeur : le fleuve, l'humus et l'acier des péniches. Une couleur : le gris-vert de la Seine selon les nuages. Une musique : un accordéoniste sur un pont. Un monument : <strong>Notre-Dame reconstruite</strong>, une silhouette qui se détache du ciel.</p>
+    <p>Un regard croisé : un enfant sur le bateau-mouche qui pointe la tour Eiffel en criant quelque chose à sa mère. Une phrase volée : <em>"Tu vois, c'est ici que tout a commencé"</em> — dit devant l'île de la Cité.</p>
+    <p>La cérémonie d'ouverture des <strong>JO 2024</strong> sur la Seine ? Ce choix est juste. Le fleuve est l'axe de la ville, sa mémoire liquide.</p>`,
+    quote: 'Le reflet de la tour Eiffel dans la Seine au coucher du soleil, tremblant et parfait.'
+  },
+  {
+    id: 'senat', day: 3,
+    name: 'Sénat — Palais du Luxembourg',
+    subtitle: 'Chambre haute du Parlement · Depuis 1799',
+    icon: '🏛️',
+    lat: 48.8462, lng: 2.3372,
+    text: `<p>Je n'avais pas spécialement envie de visiter le Sénat au départ. Et finalement c'était vraiment bien.</p>
+    <p>Construit pour <strong>Marie de Médicis</strong> en 1615. Depuis 1799, siège de la chambre haute. Ce bâtiment a traversé la Révolution, l'Empire, les deux guerres — la Luftwaffe y avait son état-major pendant l'Occupation — et il est toujours là, démocratique.</p>
+    <p>L'hémicycle avec ses boiseries et dorures. La bibliothèque avec <strong>450 000 livres</strong> et les peintures de Delacroix au plafond. Partout : Liberté, Égalité, Fraternité.</p>`,
+    quote: 'L\'architecture dit : nous étions là avant vous, nous serons là après vous.'
+  },
+  {
+    id: 'invalides', day: 3,
+    name: 'Musée de l\'Armée',
+    subtitle: 'Invalides · De la Grande Guerre à De Gaulle',
+    icon: '⚔️',
+    lat: 48.8553, lng: 2.3120,
+    text: `<p>Vaste et presque écrasant. On traverse plusieurs espaces : la <strong>Grande Guerre</strong>, l'Historial De Gaulle, la crypte de Napoléon.</p>
+    <p>La salle qui me marque le plus : la Grande Guerre. Pas pour les uniformes de généraux, mais pour les <em>objets des soldats ordinaires</em> — une gourde, un carnet de notes abîmé, un casque bosselé. Des garçons de 20 ans qui n'avaient rien demandé.</p>
+    <p>La crypte napoléonienne est spectaculaire : le tombeau de porphyre rouge sur du granit vert. Mais je pensais surtout aux millions de morts de ses guerres en regardant tout ce marbre.</p>`,
+    quote: 'Ces objets usés, marqués, disent l\'intime, le fragile, le quotidien arraché à l\'horreur.'
+  },
+  {
+    id: 'arc', day: 3,
+    name: 'Arc de Triomphe',
+    subtitle: 'Cérémonie de ravivage de la Flamme · 18h30',
+    icon: '🔥',
+    lat: 48.8738, lng: 2.2950,
+    text: `<p>En fin d'après-midi, la cérémonie de ravivage de la Flamme. Une cérémonie quotidienne, discrète, presque silencieuse.</p>
+    <p>La <strong>Flamme brûle depuis le 11 novembre 1923</strong> sur la tombe du Soldat inconnu. Ravivée chaque soir à 18h30 par des anciens combattants. Un geste répété depuis plus de cent ans.</p>
+    <p>Autour de nous des touristes photographiaient, des Parisiens passaient sans regarder. Et quelques personnes s'immobilisaient en silence. J'en faisais partie.</p>`,
+    quote: 'Ce geste répété chaque soir depuis un siècle — un fil tendu entre les générations.'
+  },
+  {
+    id: 'pantheon', day: 4,
+    name: 'Panthéon',
+    subtitle: 'Quartier Latin · Nécropole nationale',
+    icon: '⚖️',
+    lat: 48.8462, lng: 2.3510,
+    text: `<p>Conçu par <strong>Soufflot</strong> à partir de 1757, église devenue mausolée républicain en 1791. Devise gravée : <em>« Aux grands Hommes, la Patrie reconnaissante »</em>.</p>
+    <p>Le dôme monte à <strong>85 mètres</strong>. Au centre : le pendule de Foucault qui prouve que la Terre tourne. Dans un temple dédié aux grands hommes, c'est la science qui trône.</p>
+    <p>Dans la crypte : Voltaire et Rousseau face à face, Hugo, Zola, Dumas, Marie Curie, Jean Moulin. Et en 2024, les <strong>Manouchian</strong> — résistants immigrés fusillés au Mont Valérien. Le cercle se referme.</p>`,
+    quote: 'Je n\'avais pas fait le lien mais là tout boucle — du Mont Valérien au Panthéon, les mêmes noms.'
+  },
+  {
+    id: 'huchette', day: 4,
+    name: 'Théâtre de la Huchette',
+    subtitle: 'La Cantatrice chauve · Ionesco depuis 1957',
+    icon: '🎭',
+    lat: 48.8530, lng: 2.3469,
+    text: `<p>Salle minuscule, moins de cent places, la scène à deux mètres. Ce théâtre joue <em>La Cantatrice chauve</em> d'Ionesco sans interruption depuis <strong>1957</strong> — le spectacle le plus longtemps à l'affiche dans l'histoire du théâtre mondial.</p>
+    <p>La pièce : deux couples bourgeois échangent des platitudes de plus en plus absurdes, qui ne veulent rien dire. La logique part en vrille. Les mots se vident de leur sens.</p>
+    <p>J'ai ri plusieurs fois sans vraiment comprendre pourquoi — ce qui est exactement l'effet voulu.</p>`,
+    quote: 'Deux couples se retrouvent et démontrent, sans le savoir, le vide de leur existence à travers des mots qui ne communiquent rien.'
+  },
+  {
+    id: 'marine', day: 5,
+    name: 'Musée de la Marine',
+    subtitle: 'Trocadéro · Histoire maritime de la France',
+    icon: '⚓',
+    lat: 48.8637, lng: 2.2948,
+    text: `<p>Je ne réalisais pas à quel point la France a une histoire maritime importante. La France possède le <strong>2e plus grand espace maritime mondial</strong> — quelque chose qu'on n'apprend pas vraiment à l'école.</p>
+    <p>Maquettes de navires monumentales, instruments de navigation, peintures de batailles. La marine française a joué un rôle clé dans l'exploration : <strong>Bougainville, La Pérouse</strong> ont tracé les contours du monde connu.</p>
+    <p>La maquette sous vitrine : trois mâts, des dizaines de canons sur les flancs, les cordages fins. On comprend pourquoi ces navires étaient les armes les plus redoutables au monde pendant des siècles.</p>`,
+    quote: 'Voir cette maquette, c\'est toucher quelque chose de très loin dans le temps.'
+  }
+];
+
+// ── MAP INIT ──
+let map, markers = [], currentLocationId = null, currentDay = 'all';
+let photos = JSON.parse(localStorage.getItem('carnet_photos') || '{}');
+
+function initMap() {
+  map = L.map('map', {
+    center: [48.865, 2.330],
+    zoom: 13,
+    zoomControl: false
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OSM'
+  }).addTo(map);
+
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+  locations.forEach(loc => {
+    const color = dayColors[loc.day];
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="custom-marker" style="background:${color}; box-shadow: 0 4px 20px ${color}66;">
+               <span class="marker-icon">${loc.icon}</span>
+             </div>`,
+      iconSize: [36, 36],
+      iconAnchor: [18, 36],
+      popupAnchor: [0, -36]
+    });
+
+    const marker = L.marker([loc.lat, loc.lng], { icon }).addTo(map);
+    marker.on('click', () => openPanel(loc.id));
+    marker._locationId = loc.id;
+    marker._day = loc.day;
+    markers.push(marker);
+  });
+}
+
+// ── PANEL ──
+function openPanel(id) {
+  const loc = locations.find(l => l.id === id);
+  if (!loc) return;
+  currentLocationId = id;
+
+  const color = dayColors[loc.day];
+  const dayNames = { 1:'Lundi 9 mars', 2:'Mardi 10 mars', 3:'Mercredi 11 mars', 4:'Jeudi 12 mars', 5:'Vendredi 13 mars' };
+
+  document.getElementById('panel-day').textContent = `Jour ${loc.day} — ${dayNames[loc.day]}`;
+  document.getElementById('panel-day').style.color = color;
+  document.getElementById('panel-title').textContent = loc.icon + ' ' + loc.name;
+  document.getElementById('panel-subtitle').textContent = loc.subtitle;
+
+  const textDiv = document.getElementById('panel-text');
+  textDiv.innerHTML = loc.text;
+  if (loc.quote) {
+    textDiv.innerHTML += `<div class="panel-quote" style="border-color:${color};">${loc.quote}</div>`;
+  }
+
+  renderPhotos(id);
+  document.getElementById('panel').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('panel').classList.remove('open');
+  currentLocationId = null;
+}
+
+// ── PHOTOS ──
+function renderPhotos(id) {
+  const grid = document.getElementById('photos-grid');
+  const locationPhotos = photos[id] || [];
+  grid.innerHTML = '';
+
+  if (locationPhotos.length === 0) {
+    grid.innerHTML = `<div class="photo-empty" onclick="triggerUpload()">
+      <div style="font-size:24px; margin-bottom:6px;">📷</div>
+      <div>Ajoute tes photos ici</div>
+    </div>`;
+    return;
+  }
+
+  locationPhotos.forEach((src, i) => {
+    const div = document.createElement('div');
+    div.className = 'photo-item';
+    div.innerHTML = `<img src="${src}" alt="Photo ${i+1}" onclick="openLightbox('${id}', ${i})">
+      <button class="photo-delete" onclick="deletePhoto('${id}', ${i}, event)">✕</button>`;
+    grid.appendChild(div);
+  });
+}
+
+function triggerUpload() {
+  document.getElementById('file-input').click();
+}
+
+function handleFiles(e) {
+  if (!currentLocationId) return;
+  const files = Array.from(e.target.files);
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      if (!photos[currentLocationId]) photos[currentLocationId] = [];
+      photos[currentLocationId].push(ev.target.result);
+      localStorage.setItem('carnet_photos', JSON.stringify(photos));
+      renderPhotos(currentLocationId);
+    };
+    reader.readAsDataURL(file);
+  });
+  e.target.value = '';
+}
+
+function deletePhoto(id, index, e) {
+  e.stopPropagation();
+  if (!photos[id]) return;
+  photos[id].splice(index, 1);
+  localStorage.setItem('carnet_photos', JSON.stringify(photos));
+  renderPhotos(id);
+}
+
+// ── LIGHTBOX ──
+function openLightbox(id, index) {
+  const src = (photos[id] || [])[index];
+  if (!src) return;
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+
+// ── FILTER ──
+function filterDay(day, btn) {
+  currentDay = day;
+
+  document.querySelectorAll('.day-badge').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  let count = 0;
+  markers.forEach(m => {
+    const show = day === 'all' || String(m._day) === String(day);
+    if (show) {
+      if (!map.hasLayer(m)) m.addTo(map);
+      count++;
+    } else {
+      if (map.hasLayer(m)) map.removeLayer(m);
+    }
+  });
+
+  document.getElementById('visible-count').textContent = count;
+  if (currentLocationId) {
+    const loc = locations.find(l => l.id === currentLocationId);
+    if (loc && day !== 'all' && String(loc.day) !== String(day)) closePanel();
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeLightbox(); closePanel(); }
+});
+</script>
+</body>
+</html>
